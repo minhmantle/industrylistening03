@@ -2,77 +2,50 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import json
 
-st.set_page_config(page_title="Mantle Social Listening Dashboard", layout="wide")
+st.set_page_config(page_title="Mantle Social Listening", layout="wide")
 st.title("🚀 Mantle Squad - Weekly Social Listening Dashboard")
-st.caption(f"Week: {st.text_input('Tuần hiện tại', '2026-W24')} | Cập nhật: {datetime.now().strftime('%d/%m/%Y')}")
+st.caption(f"Week: {st.text_input('Tuần', '2026-W24')} | Updated: {datetime.now().strftime('%d/%m/%Y')}")
 
-# Tabs
 tab_upload, tab_ai, tab_rwa, tab_top5, tab_metrics = st.tabs([
-    "📥 Upload Data (CSV)", 
-    "📊 AI Agents Weekly", 
-    "🏦 RWA / Institutional", 
-    "🔥 Top 5 Impactful", 
-    "📈 Metrics & Alpha"
+    "📥 Upload Data", "📊 AI Agents", "🏦 RWA/Institutional", "🔥 Top 5", "📈 Metrics"
 ])
 
 with tab_upload:
-    st.header("📥 Upload CSV từ Twitter Web Exporter")
-    st.info("Hướng dẫn: Dùng Twitter Web Exporter export search results → Upload file CSV ở đây.")
+    st.header("Upload CSV từ Twitter Web Exporter")
+    uploaded = st.file_uploader("Upload CSV", type=["csv"])
     
-    uploaded_file = st.file_uploader("Chọn file CSV hoặc JSON", type=["csv", "json"])
-    
-    if uploaded_file:
-        try:
-            if uploaded_file.name.endswith(".csv"):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_json(uploaded_file)
-            
-            st.success(f"✅ Đã load **{len(df)}** tweets!")
-            st.dataframe(df.head(20), use_container_width=True)
-            st.session_state["df"] = df
-        except Exception as e:
-            st.error(f"Lỗi đọc file: {e}")
+    if uploaded:
+        df = pd.read_csv(uploaded)
+        st.success(f"✅ Load {len(df)} tweets")
+        st.session_state.df = df
+        st.dataframe(df.head(10), use_container_width=True)
 
-with tab_ai:
-    st.header("📊 AI Agents - Key Narratives & Alpha Signals")
-    if "df" in st.session_state:
-        df = st.session_state["df"]
-        st.subheader("Thống kê nhanh từ data")
-        st.metric("Số lượng tweet", len(df))
+# Tự động xử lý nếu có data
+if "df" in st.session_state:
+    df = st.session_state.df
+    text_col = next((col for col in ['text', 'tweetText', 'full_text', 'content'] if col in df.columns), None)
+    
+    with tab_ai:
+        st.header("📊 AI Agents & Hot Narratives")
+        if text_col:
+            text = " ".join(df[text_col].dropna().astype(str))
+            words = pd.Series(text.lower().split()).value_counts().head(20)
+            st.plotly_chart(px.bar(words, title="Top Keywords"), use_container_width=True)
         
-        # Simple keyword analysis (nếu có cột text)
-        if "text" in df.columns or "tweetText" in df.columns or "full_text" in df.columns:
-            text_col = "text" if "text" in df.columns else ("tweetText" if "tweetText" in df.columns else "full_text")
-            text = " ".join(df[text_col].dropna().astype(str).str.lower())
-            words = pd.Series(text.split()).value_counts().head(15)
-            fig = px.bar(words, title="Top từ khóa phổ biến")
-            st.plotly_chart(fig, use_container_width=True)
-    
-    st.text_area("Key Narratives (cập nhật thủ công)", height=180, 
-                 value="• AI Agents chuyển sang Autonomous Economic Entities\n• x402 Payment Standard + ERC-8004\n• Agentic Finance & M2M Economy\n• Privacy Compute là bottleneck")
+        st.text_area("Key Narratives (chỉnh lại nếu cần)", height=200, 
+                     value="• AI Agents + x402\n• RWA + Institutional\n• ...")
 
-with tab_rwa:
-    st.header("🏦 RWA / Institutional & Competitors")
-    st.text_area("Significant Reports / Articles / Podcasts", height=200, 
-                 value="Dán link report + tóm tắt ở đây (ví dụ: CoinGecko RWA Report, Binance Research...)")
+    with tab_top5:
+        st.header("🔥 Top 5 Impactful (Auto sort by engagement)")
+        if 'favorite_count' in df.columns:
+            top = df.nlargest(5, 'favorite_count')[['text', 'user_name', 'favorite_count', 'retweet_count']]
+            st.dataframe(top, use_container_width=True)
 
-with tab_top5:
-    st.header("🔥 5 Top Impactful News / Partnerships / Narratives")
-    for i in range(1, 6):
-        with st.expander(f"#{i}"):
-            st.text_input(f"Tiêu đề {i}", key=f"title{i}")
-            st.text_area(f"Mô tả + Mantle angle {i}", height=100, key=f"desc{i}")
+    with tab_metrics:
+        st.metric("Total Tweets", len(df))
+        if 'favorite_count' in df.columns:
+            st.metric("Total Likes", df['favorite_count'].sum())
+            st.metric("Total Retweets", df['retweet_count'].sum())
 
-with tab_metrics:
-    st.header("📈 Metrics & Actionable Alpha")
-    if "df" in st.session_state:
-        df = st.session_state["df"]
-        st.metric("Tổng impressions ước tính", f"{len(df) * 1200:,}")
-    
-    st.text_area("Actionable cho Mantle Squad", height=150, 
-                 value="- Push nội dung AI Agents + xStocksFi\n- Ý tưởng bounty: ...\n- Nội dung cần làm tuần sau: ...")
-
-st.caption("Built for Mantle Squad • Cộng Đồng Là Sức Mạnh Thật Sự 🚀")
+st.caption("Mantle Squad • Cộng Đồng Là Sức Mạnh Thật Sự")
